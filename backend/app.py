@@ -79,7 +79,53 @@ def predict_sales():
         # so that it has the same structure expected by
         # the trained model pipeline.
         input_data = pd.DataFrame([sample])
+        # --------------------------------------------------------
+        # Feature Engineering
+        # --------------------------------------------------------
 
+        # Derive Product ID Prefix from the first two characters
+        # of Product_Id, as identified during EDA.
+        input_data["Product_Id_Prefix"] = (
+            input_data["Product_Id"].str[:2]
+        )
+
+        # Calculate Store Age from the establishment year.
+        # 2026 is used as the reference year for deployment.
+        input_data["Store_Age"] = (
+            2026 - input_data["Store_Establishment_Year"]
+        )
+
+        # Normalize the inconsistent sugar-content category.
+        # 'reg' and 'Regular' represent the same category.
+        input_data["Product_Sugar_Content"] = (
+            input_data["Product_Sugar_Content"]
+            .replace({"reg": "Regular"})
+        )
+
+
+        # --------------------------------------------------------
+        # Ensure columns are in exactly the same order expected
+        # by the trained model.
+        # --------------------------------------------------------
+        model_features = [
+            "Product_Id",
+            "Product_Weight",
+            "Product_Sugar_Content",
+            "Product_Allocated_Area",
+            "Product_Type",
+            "Product_MRP",
+            "Store_Id",
+            "Store_Establishment_Year",
+            "Store_Size",
+            "Store_Location_City_Type",
+            "Store_Type",
+            "Product_Id_Prefix",
+            "Store_Age"
+        ]
+
+        input_data = input_data[model_features]
+
+        
         # Generate prediction
         predicted_sales = model.predict(input_data)[0]
 
