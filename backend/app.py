@@ -156,48 +156,141 @@ def predict_sales_batch():
     """
     Handles POST requests for batch sales prediction.
 
-    Expects a CSV file containing multiple product-store
-    records and returns predictions for all records.
+    Expects a CSV file containing the following columns:
+
+    Product_Weight
+    Product_Sugar_Content
+    Product_Allocated_Area
+    Product_MRP
+    Store_Size
+    Store_Location_City_Type
+    Store_Type
+    Product_Id_char
+    Store_Age_Years
+    Product_Type_Category
+
+    The endpoint converts the batch input columns into the
+    feature names expected by the trained model pipeline.
     """
 
     try:
 
-        # Get the uploaded CSV file from the request
+        # --------------------------------------------------------
+        # Get uploaded CSV file
+        # --------------------------------------------------------
+
+        if "file" not in request.files:
+            return jsonify({
+                "error": "No CSV file was uploaded. Please use the 'file' field."
+            }), 400
+
         file = request.files["file"]
 
-        # Read the CSV file into a Pandas DataFrame
+        if file.filename == "":
+            return jsonify({
+                "error": "No file selected."
+            }), 400
+
+        # --------------------------------------------------------
+        # Read CSV
+        # --------------------------------------------------------
+
         input_data = pd.read_csv(file)
 
-        # Generate predictions for all rows
-        predicted_sales = model.predict(input_data)
+        # --------------------------------------------------------
+        # Required batch columns
+        # --------------------------------------------------------
 
-        # Convert predictions to Python floats
+        required_columns = [
+            "Product_Weight",
+            "Product_Sugar_Content",
+            "Product_Allocated_Area",
+            "Product_MRP",
+            "Store_Size",
+            "Store_Location_City_Type",
+            "Store_Type",
+            "Product_Id_char",
+            "Store_Age_Years",
+            "Product_Type_Category"
+        ]
+
+        # Check for missing columns
+        missing_columns = [
+            column
+            for column in required_columns
+            if column not in input_data.columns
+        ]
+
+        if missing_columns:
+            return jsonify({
+                "error": "Missing required columns",
+                "missing_columns": missing_columns
+            }), 400
+
+        # --------------------------------------------------------
+        # Create model input
+        # --------------------------------------------------------
+
+        model_input = pd.DataFrame()
+
+        model_input["Product_Weight"] = input_data["Product_Weight"]
+        model_input["Product_Sugar_Content"] = input_data["Product_Sugar_Content"]
+        model_input["Product_Allocated_Area"] = input_data["Product_Allocated_Area"]
+        model_input["Product_Type"] = input_data["Product_Type_Category"]
+        model_input["Product_MRP"] = input_data["Product_MRP"]
+
+        # Product_Id_char in the batch file represents
+        # the product ID prefix used by the model
+        model_input["Product_Id_Prefix"] = input_data["Product_Id_char"]
+
+        model_input["Store_Size"] = input_data["Store_Size"]
+        model_input["Store_Location_City_Type"] = input_data["Store_Location_City_Type"]
+        model_input["Store_Type"] = input_data["Store_Type"]
+
+        # The model was trained using Store_Id as a categorical
+        # feature, but the batch file does not contain Store_Id.
+        #
+        # We therefore provide a constant value for this feature.
+        model_input["Store_Id"] = "UNKNOWN"
+
+        # Store_Age_Years maps directly to Store_Age
+        model_input["Store_Age"] = input_data["Store_Age_Years"]
+
+        # --------------------------------------------------------
+        # Generate predictions
+        # --------------------------------------------------------
+
+        predicted_sales = model.predict(model_input)
+
         predicted_sales = [
             round(float(sales), 2)
             for sales in predicted_sales
         ]
 
-        # Add predictions to the input DataFrame
+        # --------------------------------------------------------
+        # Add predictions to original data
+        # --------------------------------------------------------
+
         output_data = input_data.copy()
 
         output_data["Predicted_Product_Store_Sales_Total"] = predicted_sales
 
-        # Convert the result to a list of dictionaries
-        # so it can be returned as JSON.
+        # --------------------------------------------------------
+        # Convert to JSON
+        # --------------------------------------------------------
+
         output_dict = output_data.to_dict(orient="records")
 
-        # Return predictions
         return jsonify({
             "predictions": output_dict
         })
 
     except Exception as e:
 
-        # Return an error message if the batch request
-        # cannot be processed.
         return jsonify({
             "error": str(e)
         }), 400
+
 
 
 # ------------------------------------------------------------
